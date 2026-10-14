@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eixo Z 3D</title>
+<style>
+  :root {
+    --bg: #e9edf1;
+    --panel: #ffffff;
+    --ink: #1b2530;
+    --muted: #5a6775;
+    --line: #cfd6de;
+    --btn: #f1f4f7;
+    --btn-h: #e3e8ee;
+    --on: #1b2530;
+    --on-ink: #ffffff;
+    --acc: #b86f00;
+    --lbl-bg: rgba(255, 255, 255, .94);
+    --fx: #c62828;
+    --c-acion: #f2a516;
+    --c-guia: #1fa598;
+    --c-estr: #9aa4af;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161b;
+      --panel: #1a2027;
+      --ink: #e8edf2;
+      --muted: #9aa7b5;
+      --line: #2e3742;
+      --btn: #232b34;
+      --btn-h: #2e3844;
+      --on: #e8edf2;
+      --on-ink: #12161b;
+      --acc: #ffb62e;
+      --lbl-bg: rgba(26, 32, 39, .94);
+      --fx: #ff6b5e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    height: 100vh;
+    height: 100dvh;
+  }
+  .stage { position: relative; overflow: hidden; background: var(--bg); min-height: 0; }
+  .stage canvas { display: block; position: absolute; inset: 0; }
+  #rotulos { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+  .panel {
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    overflow: auto;
+    padding: 16px;
+    min-height: 0;
+  }
+  .panel h1 { font-size: 17px; margin: 0 0 2px; }
+  .panel .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  .panel h2 {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); margin: 18px 0 8px; font-weight: 600;
+  }
+  .read { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .read div {
+    background: var(--btn); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  }
+  .read small { display: block; color: var(--muted); font-size: 11px; }
+  .read b { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .read b span { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .read .wide { grid-column: 1 / -1; }
+  .read .wide b { font-size: 14px; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button {
+    font: inherit; color: var(--ink); background: var(--btn);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; cursor: pointer;
+  }
+  button:hover { background: var(--btn-h); }
+  button[aria-pressed="true"] { background: var(--on); color: var(--on-ink); border-color: var(--on); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+  .row button { flex: 1 1 auto; }
+  input[type=range] { width: 100%; accent-color: var(--acc); margin: 4px 0; }
+  .lab { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; }
+  .lab output { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
+  .calc { margin-top: 8px; font-size: 13px; color: var(--muted); display: grid; gap: 2px; }
+  .calc b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .chk { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--ink); }
+  .legenda { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; color: var(--muted); font-size: 12.5px; }
+  .legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  .banner {
+    position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--fx); color: var(--ink);
+    padding: 8px 14px; border-radius: 8px; font-weight: 600; text-align: center;
+    max-width: calc(100% - 32px); display: none; pointer-events: none;
+  }
+  .banner.show { display: block; }
+  .tip {
+    position: absolute; z-index: 5; pointer-events: none; display: none; max-width: 240px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  }
+  .tip b { display: block; margin-bottom: 2px; }
+  .tip span { color: var(--muted); font-size: 13px; }
+
+  /* rótulos 3D (CSS2DRenderer) */
+  .lbl { width: 0; height: 0; font-size: 12px; }
+  .lbl .dot {
+    position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ink);
+  }
+  .lbl .ln {
+    position: absolute; left: 0; top: 0; height: 1px; transform-origin: 0 0; background: var(--ink); opacity: .7;
+  }
+  .lbl .tx {
+    position: absolute; white-space: nowrap; transform: translate(0, -50%);
+    background: var(--lbl-bg); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 5px; padding: 2px 7px;
+  }
+  .lbl .tx.esq { transform: translate(-100%, -50%); }
+  .lbl.fx { display: none; }
+  .lbl.fx .dot, .lbl.fx .ln { background: var(--fx); }
+  .lbl.fx .tx { border-color: var(--fx); }
+  .fx-on .lbl.fx { display: block; }
+  .fx-on .lbl:not(.fx) { display: none; }
+  .sem-rotulos .lbl:not(.fx) { display: none; }
+
+  @media (max-width: 760px) {
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+    .panel { border-left: 0; border-top: 1px solid var(--line); max-height: 46vh; max-height: 46dvh; }
+    .read b { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="stage" id="stage">
+    <div class="banner" id="banner"></div>
+    <div class="tip" id="tip"></div>
+  </main>
+
+  <aside class="panel" aria-label="Controles">
+    <h1>Eixo Z do elevador</h1>
+    <p class="sub">Motor, fuso, porca e carro: tudo ligado pela mesma posição.</p>
+
+    <h2>Valores ao vivo</h2>
+    <div class="read" aria-live="off">
+      <div><small>Posição do carro</small><b id="vPos">0,0</b> <b><span>mm</span></b></div>
+      <div><small>Voltas do fuso</small><b id="vVoltas">0,0</b></div>
+      <div><small>Rotação equivalente</small><b id="vRpm">0</b> <b><span>rpm</span></b></div>
+      <div><small>Sentido do fuso</small><b id="vSentido">Parado</b></div>
+      <div class="wide"><small>Curso total</small><b id="vCurso"></b></div>
+    </div>
+
+    <h2>Movimento</h2>
+    <div class="row">
+      <button id="btnPausa" aria-pressed="false">Pausar</button>
+    </div>
+    <div class="lab" style="margin-top:8px"><span>Posição manual</span><output id="outPos">0 mm</output></div>
+    <input type="range" id="rngPos" min="0" max="300" step="0.5" value="0" aria-label="Posição manual do carro">
+    <div class="lab" style="margin-top:6px"><span>Avanço do fuso</span><output id="outAvanco"></output></div>
+    <div class="row" id="grpAvanco" role="group" aria-label="Avanço do fuso">
+      <button data-av="2">T8x2</button>
+      <button data-av="4">T8x4</button>
+      <button data-av="8">T8x8</button>
+    </div>
+    <p class="hint">Avanço menor: mais voltas para o mesmo curso, carro mais lento.</p>
+
+    <h2>Esforço e tombamento</h2>
+    <div class="row">
+      <button id="btnEsforco" aria-pressed="false">Mostrar esforço</button>
+      <button id="btnSemHastes" aria-pressed="false">Sem hastes</button>
+    </div>
+    <div class="lab" style="margin-top:10px"><span>Balanço da carga</span><output id="outBalanco"></output></div>
+    <input type="range" id="rngBalanco" min="0" max="100" step="1" aria-label="Balanço da carga">
+    <p class="hint">Mais balanço → hastes mais afastadas e rolamentos mais longos.</p>
+    <div class="calc">
+      <span>Peso da carga: <b id="ePeso"></b></span>
+      <span>Braço até as hastes: <b id="eBraco"></b></span>
+      <span>Momento (peso × braço): <b id="eMomento"></b></span>
+      <span>Reação em cada rolamento: <b id="eReacao"></b></span>
+    </div>
+
+    <h2>Vista</h2>
+    <div class="row" id="grpVistas">
+      <button data-view="front">Frontal</button>
+      <button data-view="side">Lateral</button>
+      <button data-view="top">Superior</button>
+      <button data-view="iso">3/4</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button id="btnExplodir" aria-pressed="false">Vista explodida</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="chkRotulos" checked> Mostrar rótulos</label>
+
+    <h2>Cores</h2>
+    <div class="legenda">
+      <span><i style="background:var(--c-acion)"></i>Acionamento</span>
+      <span><i style="background:var(--c-guia)"></i>Guiagem</span>
+      <span><i style="background:var(--c-estr)"></i>Estrutura</span>
+    </div>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ============ Parâmetros (mm). 1 mm = 1 unidade da cena ============ */
+const P = {
+  curso: 300,               // curso útil do carro
+  fusoDiametro: 8,          // T8
+  fusoAvanco: 8,            // mm por volta (T8x8). Ajustável: 2, 4, 8
+  hasteDiametro: 8,
+  hasteEspacamento: 60,     // distância entre centros das hastes
+  hasteComprimento: 380,
+  rolamentoComprimento: 30, // LM8LUU
+  carroLargura: 80,
+  carroBalanco: 40,         // quanto a carga avança para frente do plano das hastes
+  alturaTotal: 400,
+  pesoCarga: 6              // N (cerca de 0,6 kg, carrinho 1:18)
+};
+const VMAX_RPS = 20;        // limite visual de giro (evita efeito "roda de carroça" a 60 fps)
+const PAUSA = 1;            // s
+
+/* ============ Medidas derivadas ============ */
+const D = {};
+D.baseT = 10;                                   // espessura da placa base
+D.topT = P.alturaTotal - D.baseT - P.hasteComprimento;
+D.hasteY0 = D.baseT;                            // face superior da placa base
+D.hasteY1 = D.hasteY0 + P.hasteComprimento;     // face inferior da placa superior
+D.placaE = 8;                                   // espessura da placa do carro
+D.placaProf = P.hasteEspacamento + 20;          // profundidade (z) da placa do carro
+D.mancalH = 10;
+D.fusoY0 = D.hasteY0 + D.mancalH;
+D.acopH = 25;
+D.acopY1 = D.hasteY1 - 2;
+D.acopY0 = D.acopY1 - D.acopH;
+D.motorY0 = D.hasteY1 + D.topT;
+D.pc0 = D.hasteY0 + 6 + P.rolamentoComprimento + D.placaE / 2; // centro da placa do carro com curso = 0
+D.rolSep = P.rolamentoComprimento + D.placaE;   // distância entre os centros dos dois rolamentos
+D.cargaZ0 = 9;                                  // face traseira da carga (folga das hastes e da porca)
+D.cargaH = 30;
+D.folgaFolga = 3;                               // folga da porca flutuante
+const folgaTopo = D.acopY0 - (D.pc0 + P.curso + 10);
+const folgaRol = D.hasteY1 - (D.pc0 + P.curso + D.placaE / 2 + P.rolamentoComprimento);
+if (folgaTopo < 0 || folgaRol < 0) console.warn('Curso não cabe na altura total: ajuste P.');
+
+/* ============ Cena, câmera, luz ============ */
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setClearColor(0x000000, 0);
+stage.prepend(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer({ element: document.getElementById('rotulos') || (() => {
+  const d = document.createElement('div'); d.id = 'rotulos'; stage.appendChild(d); return d; })() });
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 5, 6000);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x556070, 1.15));
+const sun = new THREE.DirectionalLight(0xffffff, 2.1);
+sun.position.set(300, 600, 500);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xffffff, 0.7);
+fill.position.set(-400, 200, -300);
+scene.add(fill);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.minDistance = 220;
+controls.maxDistance = 1800;
+
+/* ============ Peças ============ */
+const parts = {};
+function part(key, name, desc, color, double = false) {
+  parts[key] = {
+    key, name, desc, meshes: [],
+    mat: new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2, side: double ? THREE.DoubleSide : THREE.FrontSide })
+  };
+}
+const AMBAR = 0xf2a516, AMBAR_ESC = 0xa8680c, AMBAR_CLARO = 0xffc94d;
+const TEAL = 0x2fb7a8, TEAL_ESC = 0x0f7f78, TEAL_CLARO = 0x7fd6cb;
+const CINZA = 0xaeb6bf, CINZA_M = 0x8d96a0, CINZA_ESC = 0x5d6670;
+
+part('motor', 'Motor NEMA 17', 'Gera o giro. É um motor de passo: cada passo é um ângulo fixo.', AMBAR);
+part('acoplamento', 'Acoplamento flexível', 'Liga o eixo do motor ao fuso e absorve pequenos desalinhamentos.', AMBAR_ESC);
+part('fuso', 'Fuso T8', '', AMBAR);
+part('porca', 'Porca flutuante', 'Transforma o giro do fuso em subida. Flutua com folga e não passa esforço lateral ao fuso.', AMBAR_ESC, true);
+part('haste', 'Haste 8 mm retificada', 'Guia o carro e segura o momento da carga. Fica parada, não gira.', TEAL);
+part('rolamento', 'Rolamento LM8LUU', 'Desliza na haste com pouco atrito e impede o carro de tombar.', TEAL_ESC, true);
+part('placaCarro', 'Placa do carro', 'Une rolamentos, porca e carga num único conjunto rígido.', TEAL_CLARO);
+part('mancal', 'Mancal de apoio', 'Apoia a ponta de baixo do fuso e mantém o fuso alinhado.', CINZA_M);
+part('base', 'Placa base', 'Estrutura: fixa as hastes e o mancal.', CINZA);
+part('topo', 'Placa superior', 'Estrutura: prende as hastes em cima e apoia o motor.', CINZA);
+part('carga', 'Carga (carrinho 1:18)', 'O balanço dela cria o momento que tenta tombar o carro.', CINZA_ESC);
+
+function mesh(key, geo, mat) {
+  const m = new THREE.Mesh(geo, mat || parts[key].mat);
+  m.userData.part = key;
+  parts[key].meshes.push(m);
+  return m;
+}
+function group(parent, y = 0) {
+  const g = new THREE.Group();
+  g.userData.y0 = y;
+  g.position.y = y;
+  parent.add(g);
+  return g;
+}
+
+/* geometrias auxiliares */
+function plateGeo(w, d, t, holes) {
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2, -d / 2); s.lineTo(w / 2, -d / 2); s.lineTo(w / 2, d / 2); s.lineTo(-w / 2, d / 2); s.closePath();
+  for (const h of holes) {
+    const p = new THREE.Path();
+    p.absarc(h.x, -h.z, h.r, 0, Math.PI * 2, true);
+    s.holes.push(p);
+  }
+  const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false, curveSegments: 40 });
+  g.rotateX(-Math.PI / 2);
+  g.translate(0, -t / 2, 0);
+  return g;
+}
+function ringGeo(ro, ri, h) {
+  const outer = new THREE.CylinderGeometry(ro, ro, h, 40, 1, true);
+  const inner = new THREE.CylinderGeometry(ri, ri, h, 40, 1, true);
+  const top = new THREE.RingGeometry(ri, ro, 40); top.rotateX(-Math.PI / 2); top.translate(0, h / 2, 0);
+  const bot = new THREE.RingGeometry(ri, ro, 40); bot.rotateX(Math.PI / 2); bot.translate(0, -h / 2, 0);
+  return mergeGeometries([outer, inner, top, bot]);
+}
+function cyl(r, h, seg = 32) { return new THREE.CylinderGeometry(r, r, h, seg); }
+
+const hx = P.hasteEspacamento / 2;
+const raioFuso = P.fusoDiametro / 2;
+const raioHaste = P.hasteDiametro / 2;
+const explodiveis = [];
+function explodivel(g, off) { g.userData.off = off; explodiveis.push(g); return g; }
+
+/* --- estrutura --- */
+const gBase = explodivel(group(scene), -80);
+{
+  const m = mesh('base', new THREE.BoxGeometry(100, D.baseT, 60));
+  m.position.y = D.baseT / 2;
+  gBase.add(m);
+}
+const gMancal = explodivel(group(scene), -35);
+{
+  const m = mesh('mancal', new THREE.BoxGeometry(20, D.mancalH, 20));
+  m.position.y = D.hasteY0 + D.mancalH / 2;
+  gMancal.add(m);
+}
+const gTopo = explodivel(group(scene), 120);
+{
+  const m = mesh('topo', plateGeo(100, 60, D.topT, [{ x: 0, z: 0, r: 6 }]));
+  m.position.y = D.hasteY1 + D.topT / 2;
+  gTopo.add(m);
+}
+
+/* --- guiagem: hastes --- */
+const hastes = [];
+for (const sx of [-1, 1]) {
+  const m = mesh('haste', cyl(raioHaste, P.hasteComprimento, 28));
+  m.position.set(sx * hx, D.hasteY0 + P.hasteComprimento / 2, 0);
+  scene.add(m);
+  hastes.push(m);
+}
+
+/* --- acionamento: motor, eixo, acoplamento, fuso --- */
+const gMotor = explodivel(group(scene), 190);
+const motor = mesh('motor', new THREE.BoxGeometry(42, 40, 42));
+motor.position.y = D.motorY0 + 20;
+gMotor.add(motor);
+const gEixoRot = new THREE.Group();
+gMotor.add(gEixoRot);
+{
+  const eixo = mesh('motor', cyl(2.5, D.motorY0 - D.acopY1, 20), new THREE.MeshStandardMaterial({ color: AMBAR_CLARO, roughness: 0.4, metalness: 0.3 }));
+  eixo.position.y = (D.motorY0 + D.acopY1) / 2;
+  gEixoRot.add(eixo);
+}
+const gAcop = explodivel(group(scene), 70);
+const gAcopRot = new THREE.Group();
+gAcop.add(gAcopRot);
+{
+  const m = mesh('acoplamento', cyl(9.5, D.acopH, 36));
+  m.position.y = (D.acopY0 + D.acopY1) / 2;
+  gAcopRot.add(m);
+  for (const sx of [-1, 1]) {
+    const p = mesh('acoplamento', new THREE.BoxGeometry(3, 9, 3), new THREE.MeshStandardMaterial({ color: 0x4a2c05, roughness: 0.6 }));
+    p.position.set(sx * 11, m.position.y, 0);
+    gAcopRot.add(p);
+  }
+}
+const gFusoRot = new THREE.Group();
+scene.add(gFusoRot);
+const fusoLen = D.acopY0 - D.fusoY0;
+let helice = null;
+const matHelice = new THREE.MeshStandardMaterial({ color: AMBAR_CLARO, roughness: 0.4, metalness: 0.3 });
+let raioNucleo = 3.3;
+class Helice extends THREE.Curve {
+  constructor(R, voltas) { super(); this.R = R; this.voltas = voltas; }
+  getPoint(t, out = new THREE.Vector3()) {
+    const a = t * this.voltas * Math.PI * 2;      // ângulo cresce com y: hélice de mão direita
+    return out.set(this.R * Math.sin(a), D.fusoY0 + t * fusoLen, this.R * Math.cos(a));
+  }
+}
+const nucleo = mesh('fuso', cyl(raioNucleo, fusoLen, 28));
+nucleo.position.y = D.fusoY0 + fusoLen / 2;
+gFusoRot.add(nucleo);
+function construirRosca() {
+  const rt = Math.min(0.8, P.fusoAvanco * 0.2);          // raio do filete
+  const R = raioFuso - rt;                                // crista do filete = raio do fuso
+  const voltas = fusoLen / P.fusoAvanco;                  // passo da rosca = avanço (visual)
+  nucleo.geometry.dispose();
+  nucleo.geometry = cyl(R, fusoLen, 28);
+  if (helice) { gFusoRot.remove(helice); helice.geometry.dispose(); parts.fuso.meshes.splice(parts.fuso.meshes.indexOf(helice), 1); }
+  const seg = Math.min(2600, Math.ceil(voltas * 12));
+  helice = mesh('fuso', new THREE.TubeGeometry(new Helice(R, voltas), seg, rt, 6, false), matHelice);
+  gFusoRot.add(helice);
+}
+construirRosca();
+
+/* --- carro --- */
+const gCar = new THREE.Group();
+scene.add(gCar);
+const gTilt = new THREE.Group();
+gCar.add(gTilt);
+
+const placa = mesh('placaCarro', plateGeo(P.carroLargura, D.placaProf, D.placaE, [
+  { x: 0, z: 0, r: 9 }, { x: -hx, z: 0, r: 5.5 }, { x: hx, z: 0, r: 5.5 }
+]));
+gTilt.add(placa);
+
+const rolamentos = [];
+const gRolSup = explodivel(group(gTilt, 0), 45);
+const gRolInf = explodivel(group(gTilt, 0), -45);
+const yRol = D.placaE / 2 + P.rolamentoComprimento / 2;
+for (const sx of [-1, 1]) {
+  const a = mesh('rolamento', ringGeo(7.5, 4.2, P.rolamentoComprimento));
+  a.position.set(sx * hx, yRol, 0);
+  gRolSup.add(a);
+  const b = mesh('rolamento', ringGeo(7.5, 4.2, P.rolamentoComprimento));
+  b.position.set(sx * hx, -yRol, 0);
+  gRolInf.add(b);
+  rolamentos.push(a, b);
+}
+
+const gCarga = explodivel(group(gTilt, 0), 45);
+const cargaBox = new THREE.BoxGeometry(60, D.cargaH, 1);
+cargaBox.translate(0, 0, 0.5);
+const carga = mesh('carga', cargaBox);
+carga.position.set(0, D.placaE / 2 + D.cargaH / 2, D.cargaZ0);
+gCarga.add(carga);
+
+const gPorca = explodivel(group(gCar, 0), -25);
+{
+  const corpo = ringGeo(7, 4.3, 17); corpo.translate(0, 1.5, 0);
+  const flange = ringGeo(11, 4.3, 4); flange.translate(0, -9, 0);
+  gPorca.add(mesh('porca', mergeGeometries([corpo, flange])));
+  for (const sx of [-1, 1]) {
+    const p = mesh('porca', cyl(0.9, D.folgaFolga, 10));
+    p.position.set(sx * 10, -D.placaE / 2 - D.folgaFolga / 2, 0);
+    gPorca.add(p);
+  }
+}
+
+/* ============ Rótulos 3D ============ */
+const rotulos = [];
+function addRotulo(parent, pos, texto, dx, dy, cls = '') {
+  const el = document.createElement('div');
+  el.className = 'lbl ' + cls;
+  const dot = document.createElement('i'); dot.className = 'dot';
+  const ln = document.createElement('i'); ln.className = 'ln';
+  ln.style.width = Math.hypot(dx, dy) + 'px';
+  ln.style.transform = 'rotate(' + Math.atan2(dy, dx) + 'rad)';
+  const tx = document.createElement('span'); tx.className = 'tx' + (dx < 0 ? ' esq' : '');
+  tx.style.left = dx + 'px'; tx.style.top = dy + 'px';
+  tx.textContent = texto;
+  el.append(dot, ln, tx);
+  const o = new CSS2DObject(el);
+  o.position.set(pos[0], pos[1], pos[2]);
+  parent.add(o);
+  rotulos.push(o);
+  return o;
+}
+addRotulo(gMotor, [21, D.motorY0 + 20, 0], parts.motor.name, 90, -14);
+addRotulo(gAcop, [9.5, (D.acopY0 + D.acopY1) / 2, 0], parts.acoplamento.name, 100, 4);
+addRotulo(scene, [raioFuso, 300, 0], parts.fuso.name, 100, -30);
+addRotulo(gMancal, [10, D.hasteY0 + D.mancalH / 2, 0], parts.mancal.name, 90, 10);
+const rotHaste = addRotulo(scene, [-hx - raioHaste, 250, 0], parts.haste.name, -100, 14);
+const rotRol = addRotulo(gRolSup, [-hx - 7.5, yRol, 0], parts.rolamento.name, -100, -52);
+addRotulo(gTilt, [-P.carroLargura / 2, 0, 0], parts.placaCarro.name, -100, 44);
+addRotulo(gPorca, [11, -9, 0], parts.porca.name, 100, 40);
+const rotCarga = addRotulo(gCarga, [30, D.cargaH / 2, 0], 'Carga (carrinho 1:18)', 100, -56);
+
+/* ============ Setas de esforço ============ */
+const gEsforco = new THREE.Group();
+gEsforco.visible = false;
+gCar.add(gEsforco);
+const COR_PESO = 0xe53935, COR_MOM = 0xff7a1a, COR_REA = 0x2f7df6;
+const shaftGeo = new THREE.CylinderGeometry(1.7, 1.7, 1, 10); shaftGeo.translate(0, 0.5, 0);
+const headGeo = new THREE.ConeGeometry(5.5, 12, 14); headGeo.translate(0, 6, 0);
+function matSeta(c) { return new THREE.MeshBasicMaterial({ color: c, depthTest: false, transparent: true, opacity: 0.96 }); }
+function criarSeta(cor) {
+  const g = new THREE.Group();
+  const mat = matSeta(cor);
+  const shaft = new THREE.Mesh(shaftGeo, mat);
+  const head = new THREE.Mesh(headGeo, mat);
+  shaft.renderOrder = head.renderOrder = 20;
+  g.add(shaft, head);
+  g.userData = { shaft, head };
+  gEsforco.add(g);
+  return g;
+}
+const Y = new THREE.Vector3(0, 1, 0);
+function posSeta(g, from, dir, len) {
+  const hl = Math.min(14, len * 0.45);
+  g.userData.shaft.scale.y = Math.max(len - hl, 0.01);
+  g.userData.head.position.y = len - hl;
+  g.userData.head.scale.setScalar(hl / 12);
+  g.position.copy(from);
+  g.quaternion.setFromUnitVectors(Y, dir);
+}
+const setaPeso = criarSeta(COR_PESO);
+const setaSup = criarSeta(COR_REA);
+const setaInf = criarSeta(COR_REA);
+const cgMarca = new THREE.Mesh(new THREE.SphereGeometry(3.6, 16, 12), matSeta(COR_PESO));
+cgMarca.renderOrder = 21;
+gEsforco.add(cgMarca);
+
+class Arco extends THREE.Curve {
+  constructor(R, a0, a1) { super(); this.R = R; this.a0 = a0; this.a1 = a1; }
+  getPoint(t, out = new THREE.Vector3()) {
+    const a = this.a0 + (this.a1 - this.a0) * t;
+    return out.set(0, this.R * Math.cos(a), this.R * Math.sin(a));
+  }
+}
+const gMomento = new THREE.Group();
+gMomento.position.set(hx + 28, 0, 0);
+gEsforco.add(gMomento);
+const matMom = matSeta(COR_MOM);
+const arcoMesh = new THREE.Mesh(new THREE.BufferGeometry(), matMom);
+const arcoHead = new THREE.Mesh(headGeo, matMom);
+arcoMesh.renderOrder = arcoHead.renderOrder = 20;
+gMomento.add(arcoMesh, arcoHead);
+
+const rotPeso = addRotulo(setaPeso, [0, 0, 0], 'Peso', -30, 70, 'fx');
+const rotMom = addRotulo(gMomento, [0, 0, 0], 'Momento = peso × braço', 80, -20, 'fx');
+const rotSup = addRotulo(setaSup, [0, 0, 0], 'Reação: puxa para trás', 90, -14, 'fx');
+const rotInf = addRotulo(setaInf, [0, 0, 0], 'Reação: empurra para frente', 90, 36, 'fx');
+
+/* ============ Esforço (cálculo) ============ */
+function calcEsforco() {
+  const braco = D.cargaZ0 + P.carroBalanco / 2;      // mm do plano das hastes ao centro de massa
+  const M = P.pesoCarga * braco;                      // N·mm
+  const porRol = M / D.rolSep / 2;                    // binário dividido entre 2 hastes
+  return { braco, M, porRol };
+}
+const f0 = n => Math.round(n).toLocaleString('pt-BR');
+const f1 = n => n.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function atualizarBalanco() {
+  const b = P.carroBalanco;
+  carga.scale.z = Math.max(b, 0.01);
+  carga.visible = b >= 1;
+  rotCarga.position.z = D.cargaZ0 + b / 2;
+  const e = calcEsforco();
+  document.getElementById('outBalanco').textContent = f0(b) + ' mm';
+  document.getElementById('eBraco').textContent = f0(e.braco) + ' mm';
+  document.getElementById('eMomento').textContent = f0(e.M) + ' N·mm';
+  document.getElementById('eReacao').textContent = f1(e.porRol) + ' N';
+  document.getElementById('ePeso').textContent = f1(P.pesoCarga) + ' N';
+
+  // seta curva do momento: raio proporcional ao momento
+  const R = 16 + e.braco * 1.1;
+  const a0 = -1.0, a1 = 1.05;
+  arcoMesh.geometry.dispose();
+  arcoMesh.geometry = new THREE.TubeGeometry(new Arco(R, a0, a1), 40, 1.8, 8, false);
+  arcoHead.position.set(0, R * Math.cos(a1), R * Math.sin(a1));
+  arcoHead.quaternion.setFromUnitVectors(Y, new THREE.Vector3(0, -Math.sin(a1), Math.cos(a1)));
+  rotMom.position.set(0, R, 0);
+
+  // reações nos rolamentos (comprimento proporcional à força)
+  const len = Math.min(95, 14 + e.porRol * 9);
+  posSeta(setaSup, new THREE.Vector3(hx + 13, yRol, 7.5 + len), new THREE.Vector3(0, 0, -1), len);
+  posSeta(setaInf, new THREE.Vector3(hx + 13, -yRol, -(7.5 + len)), new THREE.Vector3(0, 0, 1), len);
+  rotSup.position.set(0, 0, 0);
+  rotInf.position.set(0, 0, 0);
+  // peso: seta de tamanho fixo (o peso não muda), do centro de massa para baixo
+  const cg = new THREE.Vector3(0, D.placaE / 2 + D.cargaH / 2, D.cargaZ0 + b / 2);
+  posSeta(setaPeso, cg, new THREE.Vector3(0, -1, 0), 70);
+  cgMarca.position.copy(cg);
+}
+
+/* ============ Movimento ============ */
+const S = {
+  pos: 0, fase: 'pausaBase', t: 0.4, prog: 0, dir: 1,
+  pausado: false, v: 0, segura: false, seguraPos: 120
+};
+const ease = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+function invEase(y) {
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (ease(m) < y) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+const duracao = () => Math.max(3, (3 * P.curso) / (P.fusoAvanco * VMAX_RPS));
+
+function passo(dt) {
+  if (S.segura) S.pos += (S.seguraPos - S.pos) * (1 - Math.exp(-dt * 4));
+  if (S.pausado) return;
+  if (S.fase === 'sobe' || S.fase === 'desce') {
+    S.prog += dt / duracao();
+    const e = ease(Math.min(S.prog, 1));
+    S.pos = P.curso * (S.fase === 'sobe' ? e : 1 - e);
+    if (S.prog >= 1) {
+      S.prog = 0; S.t = 0;
+      S.fase = S.fase === 'sobe' ? 'pausaTopo' : 'pausaBase';
+    }
+  } else {
+    S.t += dt;
+    if (S.t >= PAUSA) {
+      S.t = 0; S.prog = 0;
+      S.fase = S.fase === 'pausaTopo' ? 'desce' : 'sobe';
+    }
+  }
+}
+function retomarDe(pos) {
+  S.prog = 0; S.t = 0;
+  if (pos < 0.5) S.fase = 'pausaBase';
+  else if (pos > P.curso - 0.5) S.fase = 'pausaTopo';
+  else if (S.dir >= 0) { S.fase = 'sobe'; S.prog = invEase(pos / P.curso); }
+  else { S.fase = 'desce'; S.prog = invEase(1 - pos / P.curso); }
+}
+
+/* Ligação mecânica: a posição do carro é a única fonte da verdade */
+function aplicar() {
+  const voltas = S.pos / P.fusoAvanco;
+  const ang = -voltas * Math.PI * 2;          // subir gira o fuso num sentido; descer, no outro
+  gFusoRot.rotation.y = ang;
+  gAcopRot.rotation.y = ang;
+  gEixoRot.rotation.y = ang;
+  gCar.position.y = D.pc0 + S.pos;
+}
+
+/* ============ Estado visual ============ */
+const V = {
+  esforco: false, semHastes: false, explodir: 0, explodirAlvo: 0,
+  inclina: 0, inclinaVel: 0, rotulos: true
+};
+function anguloTombamento() { return THREE.MathUtils.degToRad(3 + (P.carroBalanco / 100) * 6); }
+
+function atualizarVisibilidade() {
+  const com = !V.semHastes;
+  hastes.forEach(m => (m.visible = com));
+  rolamentos.forEach(m => (m.visible = com));
+  rotHaste.visible = com;
+  rotRol.visible = com;
+  setaSup.visible = setaInf.visible = com;
+  rotSup.visible = rotInf.visible = com;
+  gEsforco.visible = V.esforco;
+  const lb = document.getElementById('banner');
+  if (V.semHastes) {
+    lb.textContent = 'Sem hastes, o fuso sozinho não segura o momento: o carro tomba.';
+    lb.classList.add('show');
+  } else if (V.esforco) {
+    lb.textContent = 'As hastes seguram o momento. O fuso só move.';
+    lb.classList.add('show');
+  } else lb.classList.remove('show');
+  stage.classList.toggle('fx-on', V.esforco);
+  stage.classList.toggle('sem-rotulos', !V.rotulos && !V.explodirAlvo);
+}
+
+/* ============ Câmera ============ */
+const FOV = THREE.MathUtils.degToRad(camera.fov);
+let vistaAtual = 'iso';
+let voo = null;
+function poseVista(nome) {
+  const e = V.explodirAlvo ? 1 : 0;
+  const yMin = e ? -90 : 0, yMax = e ? 650 : D.motorY0 + 40;
+  const alvo = new THREE.Vector3(0, (yMin + yMax) / 2, 12);
+  const h = yMax - yMin + 60;
+  const asp = camera.aspect || 1.5;
+  const t = Math.tan(FOV / 2);
+  const dist = Math.max(h / 2 / t, 150 / (t * asp)) * 1.08;
+  const dirs = {
+    iso: [0.62, 0.3, 0.72], front: [0, 0.015, 1], side: [-1, 0.015, 0], top: [0, 1, 0.002]
+  };
+  const d = new THREE.Vector3(...dirs[nome]).normalize();
+  if (nome === 'top') return { alvo: new THREE.Vector3(0, D.motorY0, 0), pos: new THREE.Vector3(0, D.motorY0 + 520, 1) };
+  return { alvo, pos: alvo.clone().addScaledVector(d, dist) };
+}
+function irPara(nome, dur = 0.9) {
+  vistaAtual = nome;
+  const p = poseVista(nome);
+  if (dur === 0) {
+    camera.position.copy(p.pos); controls.target.copy(p.alvo); camera.lookAt(p.alvo); controls.update();
+  } else {
+    voo = { t: 0, dur, p0: camera.position.clone(), t0: controls.target.clone(), p1: p.pos, t1: p.alvo };
+  }
+  document.querySelectorAll('#grpVistas button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === nome)));
+}
+
+/* ============ Seleção com o mouse ============ */
+const ray = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+const tip = document.getElementById('tip');
+let hover = null, ptrDirty = false, ptrX = 0, ptrY = 0;
+function realce(key, on) {
+  if (!key) return;
+  for (const m of parts[key].meshes) {
+    m.material.emissive.setHex(on ? 0xffffff : 0x000000);
+    m.material.emissiveIntensity = on ? 0.3 : 0;
+  }
+}
+function descricao(key) {
+  if (key === 'fuso') return `Converte giro em subida: ${P.fusoAvanco} mm de avanço por volta (T8x${P.fusoAvanco}).`;
+  return parts[key].desc;
+}
+function atualizarHover() {
+  ptrDirty = false;
+  const r = stage.getBoundingClientRect();
+  ptr.set(((ptrX - r.left) / r.width) * 2 - 1, -((ptrY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  const alvos = [];
+  for (const k in parts) for (const m of parts[k].meshes) if (m.visible && (m.parent === null || cadeiaVisivel(m))) alvos.push(m);
+  const hit = ray.intersectObjects(alvos, false)[0];
+  const key = hit ? hit.object.userData.part : null;
+  if (key !== hover) {
+    realce(hover, false);
+    hover = key;
+    realce(hover, true);
+  }
+  if (hover) {
+    tip.innerHTML = '';
+    const b = document.createElement('b'); b.textContent = parts[hover].name;
+    const s = document.createElement('span'); s.textContent = descricao(hover);
+    tip.append(b, s);
+    tip.style.display = 'block';
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = ptrX - r.left + 14, y = ptrY - r.top + 14;
+    if (x + w > r.width - 4) x = ptrX - r.left - w - 14;
+    if (y + h > r.height - 4) y = ptrY - r.top - h - 14;
+    tip.style.left = Math.max(4, x) + 'px';
+    tip.style.top = Math.max(4, y) + 'px';
+  } else tip.style.display = 'none';
+  renderer.domElement.style.cursor = hover ? 'pointer' : '';
+}
+function cadeiaVisivel(o) {
+  for (let n = o; n; n = n.parent) if (!n.visible) return false;
+  return true;
+}
+renderer.domElement.addEventListener('pointermove', e => { ptrX = e.clientX; ptrY = e.clientY; ptrDirty = true; });
+renderer.domElement.addEventListener('pointerleave', () => { ptrX = -9999; ptrDirty = true; });
+
+/* ============ Interface ============ */
+const $ = id => document.getElementById(id);
+const btnPausa = $('btnPausa');
+function definirPausa(p) {
+  S.pausado = p;
+  btnPausa.textContent = p ? 'Retomar' : 'Pausar';
+  btnPausa.setAttribute('aria-pressed', String(p));
+  if (!p) retomarDe(S.pos);
+}
+btnPausa.onclick = () => definirPausa(!S.pausado);
+$('rngPos').max = P.curso;
+$('rngPos').addEventListener('input', e => {
+  if (!S.pausado) definirPausa(true);
+  const novo = parseFloat(e.target.value);
+  S.dir = Math.sign(novo - S.pos) || S.dir;
+  S.pos = novo;
+});
+
+function definirAvanco(v) {
+  const p = S.pos / P.fusoAvanco; // mantém o carro no lugar, só muda o número de voltas
+  P.fusoAvanco = v;
+  construirRosca();
+  document.querySelectorAll('#grpAvanco button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.av === v)));
+  $('outAvanco').textContent = `T8x${v} (${v} mm/volta)`;
+  $('vCurso').textContent = `${P.curso} mm = ${f1(P.curso / v)} voltas`;
+  void p;
+}
+document.querySelectorAll('#grpAvanco button').forEach(b => (b.onclick = () => definirAvanco(+b.dataset.av)));
+
+$('btnEsforco').onclick = e => {
+  V.esforco = !V.esforco;
+  e.currentTarget.setAttribute('aria-pressed', String(V.esforco));
+  e.currentTarget.textContent = V.esforco ? 'Ocultar esforço' : 'Mostrar esforço';
+  atualizarVisibilidade();
+};
+$('btnSemHastes').onclick = e => {
+  V.semHastes = !V.semHastes;
+  e.currentTarget.setAttribute('aria-pressed', String(V.semHastes));
+  e.currentTarget.textContent = V.semHastes ? 'Restaurar hastes' : 'Sem hastes';
+  atualizarVisibilidade();
+};
+$('rngBalanco').value = P.carroBalanco;
+$('rngBalanco').addEventListener('input', e => { P.carroBalanco = parseFloat(e.target.value); atualizarBalanco(); });
+
+document.querySelectorAll('#grpVistas button').forEach(b => (b.onclick = () => irPara(b.dataset.view)));
+let pausadoAntes = false;
+$('btnExplodir').onclick = e => {
+  const on = !V.explodirAlvo;
+  V.explodirAlvo = on ? 1 : 0;
+  e.currentTarget.setAttribute('aria-pressed', String(!!on));
+  e.currentTarget.textContent = on ? 'Juntar peças' : 'Vista explodida';
+  if (on) { pausadoAntes = S.pausado; S.pausado = true; S.segura = true; btnPausa.disabled = true; }
+  else { S.segura = false; btnPausa.disabled = false; definirPausa(pausadoAntes); }
+  atualizarVisibilidade();
+  irPara(vistaAtual);
+};
+$('chkRotulos').onchange = e => { V.rotulos = e.target.checked; atualizarVisibilidade(); };
+
+/* ============ Laço principal ============ */
+function ajustarTamanho() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h);
+  labelRenderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(() => { ajustarTamanho(); if (!voo && vistaAtual && !userMoved) irPara(vistaAtual, 0); }).observe(stage);
+let userMoved = false;
+controls.addEventListener('start', () => { userMoved = true; voo = null; });
+
+const sentidoTxt = v => (Math.abs(v) < 0.5 ? 'Parado' : v > 0 ? 'Horário (carro sobe)' : 'Anti-horário (carro desce)');
+let ultimo = performance.now(), prevPos = 0, ultimoPainel = 0;
+function quadro(agora) {
+  const dt = Math.min((agora - ultimo) / 1000, 0.05);
+  ultimo = agora;
+
+  passo(dt);
+  aplicar();
+  if (dt > 0) {
+    const raw = (S.pos - prevPos) / dt;
+    S.v += (raw - S.v) * Math.min(1, dt * 12);
+    if (Math.abs(raw) > 0.5) S.dir = Math.sign(raw);
+  }
+  prevPos = S.pos;
+
+  // inclinação (sem hastes): mola amortecida em torno da porca
+  const alvoIncl = V.semHastes ? anguloTombamento() : 0;
+  V.inclinaVel += (alvoIncl - V.inclina) * 90 * dt;
+  V.inclinaVel *= Math.exp(-9 * dt);
+  V.inclina += V.inclinaVel * dt;
+  gTilt.rotation.x = V.inclina;
+
+  // vista explodida
+  V.explodir += (V.explodirAlvo - V.explodir) * (1 - Math.exp(-dt * 5));
+  if (Math.abs(V.explodirAlvo - V.explodir) < 0.0005) V.explodir = V.explodirAlvo;
+  for (const g of explodiveis) g.position.y = g.userData.y0 + g.userData.off * V.explodir;
+  stage.classList.toggle('sem-rotulos', !V.rotulos && V.explodir < 0.01 && !V.explodirAlvo);
+
+  // peso acompanha o centro de massa quando o carro inclina
+  if (V.esforco) {
+    const c = Math.cos(V.inclina), s = Math.sin(V.inclina);
+    const y0 = D.placaE / 2 + D.cargaH / 2, z0 = D.cargaZ0 + P.carroBalanco / 2;
+    setaPeso.position.set(0, y0 * c - z0 * s, y0 * s + z0 * c);
+    cgMarca.position.copy(setaPeso.position);
+  }
+
+  // voo de câmera
+  if (voo) {
+    voo.t += dt / voo.dur;
+    const k = ease(Math.min(voo.t, 1));
+    camera.position.lerpVectors(voo.p0, voo.p1, k);
+    controls.target.lerpVectors(voo.t0, voo.t1, k);
+    if (voo.t >= 1) voo = null;
+  }
+  if (ptrDirty) atualizarHover();
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+
+  if (agora - ultimoPainel > 50) {
+    ultimoPainel = agora;
+    const rpm = Math.abs(S.v) / P.fusoAvanco * 60;
+    $('vPos').textContent = f1(S.pos);
+    $('vVoltas').textContent = f1(S.pos / P.fusoAvanco);
+    $('vRpm').textContent = f0(rpm);
+    $('vSentido').textContent = sentidoTxt(S.v);
+    $('outPos').textContent = f0(S.pos) + ' mm';
+    if (S.pausado || S.segura) $('rngPos').value = S.pos;
+    else if (document.activeElement !== $('rngPos')) $('rngPos').value = S.pos;
+  }
+  requestAnimationFrame(quadro);
+}
+
+/* ============ Início ============ */
+if (window.matchMedia('(max-width: 760px)').matches) { V.rotulos = false; $('chkRotulos').checked = false; }
+atualizarBalanco();
+definirAvanco(P.fusoAvanco);
+atualizarVisibilidade();
+ajustarTamanho();
+irPara('iso', 0);
+aplicar();
+requestAnimationFrame(t => { ultimo = t; quadro(t); });
+
+// gancho de depuração/teste
+window.__elevador = { scene, S, P, V, D, camera, renderer };
+</script>
+</body>
+</html>
